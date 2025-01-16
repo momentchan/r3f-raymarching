@@ -19,19 +19,11 @@ export default function App() {
 
             <OrbitControls makeDefault />
 
-            <mesh>
-                <torusGeometry />
-                <meshStandardMaterial />
-            </mesh>
-
             <EffectComposer>
-                <ToneMapping/>
                 <RayMarching />
             </EffectComposer>
 
             <Utilities />
-
-
         </Canvas>
     </>
 }
