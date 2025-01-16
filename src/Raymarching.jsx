@@ -10,6 +10,7 @@ const fragmentShader = /* glsl */`
 
     uniform float time;
     uniform vec2 mouse;
+    uniform float mouseDown;
 
     vec3 rot3D(vec3 p, vec3 axis, float angle){
         return mix(dot(axis, p) * axis, p, cos(angle))
@@ -36,13 +37,19 @@ const fragmentShader = /* glsl */`
         return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0); 
     }
 
+    // Octahedron SDF - https://iquilezles.org/articles/distfunctions/
+    float sdOctahedron(vec3 p, float s) {
+        p = abs(p);
+        return (p.x+p.y+p.z-s)*0.57735027;
+    }
+
 
     float GetDist(vec3 p) {
         vec4 s = vec4(sin(time) * 3.0, 0, 0, 1);
         float sphere = sdSphere(p - s.xyz, s.w);
 
         vec3 q = p;  // input copy
-        // q.xy *= rot2D(time);
+        q.xy *= rot2D(time);
 
         q.y -= time * .4;
         q = fract(q) - .5;
@@ -55,19 +62,43 @@ const fragmentShader = /* glsl */`
         return smin(ground, smin(sphere, box, 2.0), 1.0);
     }
 
+    // Custom gradient - https://iquilezles.org/articles/palettes/
+    vec3 palette(float t) {
+        return .5+.5*cos(6.28318*(t+vec3(.3,.416,.557)));
+    }
+
+    float GetDist2(vec3 p) {
+        p.z += time * .4;
+
+        // space repetition
+        p.xy = fract(p.xy) - .5;        // spacing: 1
+        p.z = mod(p.z, .25) - .125;     // spacing: .25
+
+        float box = sdOctahedron(p, .15);
+        return box;
+    }
+
     float RayMarch(vec3 ro, vec3 rd) {
         float dt = 0.0;  // total distance travelled
 
+        vec2 m = mouse;
+        if(mouseDown<.0) m = vec2(cos(time*.2), sin(time*.2));
+        
         // Raymarching
-        for(int i = 0; i < MAX_STEPS; i++) {
+        int i;
+        for(i = 0; i < MAX_STEPS; i++) {
             vec3 p = ro + rd * dt;
-            float ds = GetDist(p);
+
+            p.xy *= rot2D(dt*.2 * m.x);
+            p.y += sin(dt * (m.y + 1.0) * .5) * .35;
+
+            float ds = GetDist2(p);
             dt += ds;
 
             if(dt > MAX_DIST || ds < SURF_DIST) break;
         }
 
-        return dt;
+        return dt * .04 + float(i) * .005;
     }
 
 
@@ -81,16 +112,16 @@ const fragmentShader = /* glsl */`
         vec3 col = vec3(0.0);
 
         // Camera Rotation
-        ro.yz *= rot2D(-mouse.y);
-        rd.yz *= rot2D(-mouse.y);
+        // ro.yz *= rot2D(-mouse.y);
+        // rd.yz *= rot2D(-mouse.y);
 
-        ro.xz *= rot2D(-mouse.x);
-        rd.xz *= rot2D(-mouse.x);
+        // ro.xz *= rot2D(-mouse.x);
+        // rd.xz *= rot2D(-mouse.x);
 
         float dt = RayMarch(ro, rd);
 
         // Coloring
-        col = vec3(dt * 0.02);
+        col = palette(dt);
         outputColor = vec4(col, 1.0);
     }
 `
@@ -103,7 +134,8 @@ class RayMarchingEffect extends Effect {
             {
                 uniforms: new Map([
                     ['time', { value: 0 }],
-                    ['mouse', { value: [0, 0] }]
+                    ['mouse', { value: [0, 0] }],
+                    ['mouseDown', { value: -1 }],
                 ])
             }
         )
@@ -115,11 +147,16 @@ class RayMarchingEffect extends Effect {
     }
 
     setMousePosition(x, y) {
-        // Normalize to range [-1, 1]
-        const normalizedX = (x / window.innerWidth) * 2 - 1; // Map [0, 1] -> [-1, 1]
-        const normalizedY = -((y / window.innerHeight) * 2 - 1); // Map [0, 1] -> [-1, 1], flip Y
-        this.mouse = [normalizedX, normalizedY];
-        this.uniforms.get('mouse').value = this.mouse;
+        // Normalize mouse coordinates to [-1, 1]
+        const nx = (x / window.innerWidth) * 2 - 1;
+        const ny = -((y / window.innerHeight) * 2 - 1); // Flip Y-axis
+
+        this.mouseHoldPos = [nx, ny];
+        this.uniforms.get('mouse').value = this.mouseHoldPos;
+    }
+
+    setMouseDown(down) {
+        this.uniforms.get('mouseDown').value = down;
     }
 }
 
@@ -130,6 +167,14 @@ export default function RayMarching() {
     useEffect(() => {
         window.addEventListener('mousemove', (event) => {
             effect.setMousePosition(event.clientX, event.clientY);
+        });
+
+        window.addEventListener('mousedown', (event) => {
+            effect.setMouseDown(1);
+        });
+
+        window.addEventListener('mouseup', () => {
+            effect.setMouseDown(-1);
         });
     }, []);
 

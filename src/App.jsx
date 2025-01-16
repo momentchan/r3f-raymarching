@@ -1,7 +1,7 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas } from '@react-three/fiber'
 import Utilities from "./r3f-gist/utility/Utilities";
-import { EffectComposer } from "@react-three/postprocessing";
+import { EffectComposer, ToneMapping } from "@react-three/postprocessing";
 import RayMarching from "./Raymarching";
 
 export default function App() {
@@ -25,6 +25,7 @@ export default function App() {
             </mesh>
 
             <EffectComposer>
+                <ToneMapping/>
                 <RayMarching />
             </EffectComposer>
 
