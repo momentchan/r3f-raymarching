@@ -1,7 +1,8 @@
 
 import { Effect } from 'postprocessing'
 import { useEffect } from 'react';
-import { Uniform } from 'three';
+import raymarching from './r3f-gist/shader/cginc/raymarching';
+import utility from './r3f-gist/shader/cginc/utility';
 
 const fragmentShader = /* glsl */`
     #define MAX_STEPS 100
@@ -12,44 +13,15 @@ const fragmentShader = /* glsl */`
     uniform vec2 mouse;
     uniform float mouseDown;
 
-    vec3 rot3D(vec3 p, vec3 axis, float angle){
-        return mix(dot(axis, p) * axis, p, cos(angle))
-               + cross(axis, p) * sin(angle);
-    }
-
-    mat2 rot2D(float angle) {
-        float s = sin(angle);
-        float c = cos(angle);
-        return mat2(c, -s, s, c);
-    }
-
-    float smin(float a, float b, float k) {
-        float h = max(k-abs(a-b), 0.0) / k;
-        return min(a, b) - h*h*h*k * (1.0/6.0);
-    }
-
-    float sdSphere(vec3 p, float s) {
-        return length(p) - s;
-    }
-
-    float sdBox(vec3 p, vec3 b) {
-        vec3 q = abs(p) - b;
-        return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0); 
-    }
-
-    // Octahedron SDF - https://iquilezles.org/articles/distfunctions/
-    float sdOctahedron(vec3 p, float s) {
-        p = abs(p);
-        return (p.x+p.y+p.z-s)*0.57735027;
-    }
-
+    ${raymarching}
+    ${utility}
 
     float GetDist(vec3 p) {
         vec4 s = vec4(sin(time) * 3.0, 0, 0, 1);
         float sphere = sdSphere(p - s.xyz, s.w);
 
         vec3 q = p;  // input copy
-        q.xy *= rot2D(time);
+        q.xy = rotate2D(q.xy, time);
 
         q.y -= time * .4;
         q = fract(q) - .5;
@@ -60,11 +32,6 @@ const fragmentShader = /* glsl */`
 
 
         return smin(ground, smin(sphere, box, 2.0), 1.0);
-    }
-
-    // Custom gradient - https://iquilezles.org/articles/palettes/
-    vec3 palette(float t) {
-        return .5+.5*cos(6.28318*(t+vec3(.3,.416,.557)));
     }
 
     float GetDist2(vec3 p) {
@@ -78,7 +45,7 @@ const fragmentShader = /* glsl */`
         return box;
     }
 
-    float RayMarch(vec3 ro, vec3 rd) {
+    float RayMarchCustom(vec3 ro, vec3 rd) {
         float dt = 0.0;  // total distance travelled
 
         vec2 m = mouse;
@@ -89,7 +56,7 @@ const fragmentShader = /* glsl */`
         for(i = 0; i < MAX_STEPS; i++) {
             vec3 p = ro + rd * dt;
 
-            p.xy *= rot2D(dt*.2 * m.x);
+            p.xy = rotate2D(p.xy, dt*.2 * m.x);
             p.y += sin(dt * (m.y + 1.0) * .5) * .35;
 
             float ds = GetDist2(p);
@@ -99,6 +66,22 @@ const fragmentShader = /* glsl */`
         }
 
         return dt * .04 + float(i) * .005;
+    }
+
+    float RayMarch(vec3 ro, vec3 rd) {
+        float ds = 0.0;  // total distance travelled
+
+        // Raymarching
+        for(int i = 0; i < MAX_STEPS; i++) {
+            vec3 p = ro + rd * ds;
+
+            float d = GetDist2(p);
+            ds += d;
+
+            if(ds > MAX_DIST || d < SURF_DIST) break;
+        }
+
+        return ds;
     }
 
 
@@ -118,10 +101,11 @@ const fragmentShader = /* glsl */`
         // ro.xz *= rot2D(-mouse.x);
         // rd.xz *= rot2D(-mouse.x);
 
-        float dt = RayMarch(ro, rd);
+        float ds = RayMarchCustom(ro, rd);
+        col = palette(ds);
+        // float ds = RayMarch(ro, rd);
 
         // Coloring
-        col = palette(dt);
         outputColor = vec4(col, 1.0);
     }
 `
