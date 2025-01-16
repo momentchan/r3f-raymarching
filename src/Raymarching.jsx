@@ -1,8 +1,8 @@
 
-import { Effect } from 'postprocessing'
 import { useEffect } from 'react';
 import raymarching from './r3f-gist/shader/cginc/raymarching';
 import utility from './r3f-gist/shader/cginc/utility';
+import CustomEffectBase from './r3f-gist/effect/CustomEffectBase';
 
 const fragmentShader = /* glsl */`
     #define MAX_STEPS 100
@@ -10,7 +10,7 @@ const fragmentShader = /* glsl */`
     #define SURF_DIST 0.01
 
     uniform float time;
-    uniform vec2 mouse;
+    uniform vec2 mousePos;
     uniform float mouseDown;
 
     ${raymarching}
@@ -48,7 +48,7 @@ const fragmentShader = /* glsl */`
     float RayMarchCustom(vec3 ro, vec3 rd) {
         float dt = 0.0;  // total distance travelled
 
-        vec2 m = mouse;
+        vec2 m = mousePos;
         if(mouseDown<.0) m = vec2(cos(time*.2), sin(time*.2));
         
         // Raymarching
@@ -110,37 +110,14 @@ const fragmentShader = /* glsl */`
     }
 `
 
-class RayMarchingEffect extends Effect {
+class RayMarchingEffect extends CustomEffectBase {
     constructor() {
         super(
             'Raymarching',
-            fragmentShader,
             {
-                uniforms: new Map([
-                    ['time', { value: 0 }],
-                    ['mouse', { value: [0, 0] }],
-                    ['mouseDown', { value: -1 }],
-                ])
+                fragmentShader
             }
         )
-    }
-
-    update(renderer, inputBuffer, deltaTime) {
-
-        this.uniforms.get('time').value += deltaTime
-    }
-
-    setMousePosition(x, y) {
-        // Normalize mouse coordinates to [-1, 1]
-        const nx = (x / window.innerWidth) * 2 - 1;
-        const ny = -((y / window.innerHeight) * 2 - 1); // Flip Y-axis
-
-        this.mouseHoldPos = [nx, ny];
-        this.uniforms.get('mouse').value = this.mouseHoldPos;
-    }
-
-    setMouseDown(down) {
-        this.uniforms.get('mouseDown').value = down;
     }
 }
 
@@ -150,7 +127,7 @@ export default function RayMarching() {
 
     useEffect(() => {
         window.addEventListener('mousemove', (event) => {
-            effect.setMousePosition(event.clientX, event.clientY);
+            effect.setMousePos(event.clientX, event.clientY);
         });
 
         window.addEventListener('mousedown', (event) => {
