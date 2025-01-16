@@ -1,5 +1,6 @@
 
 import { Effect } from 'postprocessing'
+import { useEffect } from 'react';
 import { Uniform } from 'three';
 
 const fragmentShader = /* glsl */`
@@ -8,6 +9,7 @@ const fragmentShader = /* glsl */`
     #define SURF_DIST 0.01
 
     uniform float time;
+    uniform vec2 mouse;
 
     vec3 rot3D(vec3 p, vec3 axis, float angle){
         return mix(dot(axis, p) * axis, p, cos(angle))
@@ -40,9 +42,12 @@ const fragmentShader = /* glsl */`
         float sphere = sdSphere(p - s.xyz, s.w);
 
         vec3 q = p;  // input copy
-        q.xy *= rot2D(time);
+        // q.xy *= rot2D(time);
 
-        float box = sdBox(q, vec3(.75));
+        q.y -= time * .4;
+        q = fract(q) - .5;
+
+        float box = sdBox(q, vec3(.1));
 
         float ground = p.y + .75;
 
@@ -75,10 +80,17 @@ const fragmentShader = /* glsl */`
         vec3 rd = normalize(vec3(uv, 1.0));
         vec3 col = vec3(0.0);
 
+        // Camera Rotation
+        ro.yz *= rot2D(-mouse.y);
+        rd.yz *= rot2D(-mouse.y);
+
+        ro.xz *= rot2D(-mouse.x);
+        rd.xz *= rot2D(-mouse.x);
+
         float dt = RayMarch(ro, rd);
 
         // Coloring
-        col = vec3(dt * 0.2);
+        col = vec3(dt * 0.02);
         outputColor = vec4(col, 1.0);
     }
 `
@@ -90,21 +102,36 @@ class RayMarchingEffect extends Effect {
             fragmentShader,
             {
                 uniforms: new Map([
-                    ['time', { value: 0}]
+                    ['time', { value: 0 }],
+                    ['mouse', { value: [0, 0] }]
                 ])
             }
         )
     }
 
-    update(renderer, inputBuffer, deltaTime) 
-    {
+    update(renderer, inputBuffer, deltaTime) {
+
         this.uniforms.get('time').value += deltaTime
+    }
+
+    setMousePosition(x, y) {
+        // Normalize to range [-1, 1]
+        const normalizedX = (x / window.innerWidth) * 2 - 1; // Map [0, 1] -> [-1, 1]
+        const normalizedY = -((y / window.innerHeight) * 2 - 1); // Map [0, 1] -> [-1, 1], flip Y
+        this.mouse = [normalizedX, normalizedY];
+        this.uniforms.get('mouse').value = this.mouse;
     }
 }
 
 export default function RayMarching() {
 
     const effect = new RayMarchingEffect();
+
+    useEffect(() => {
+        window.addEventListener('mousemove', (event) => {
+            effect.setMousePosition(event.clientX, event.clientY);
+        });
+    }, []);
 
     return <primitive object={effect}>
 
